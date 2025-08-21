@@ -1,0 +1,24 @@
+services:
+  top-5g-pm-file-sync:
+    build: .
+    image: top-5g-pm-file-sync:1.0.0
+    container_name: top-5g-pm-file-sync
+    restart: unless-stopped
+    stop_grace_period: 600s
+    environment:
+      SPRING_PROFILES_ACTIVE: sit
+      TZ: "Asia/Kolkata"
+      JAVA_OPTS: "-Duser.timezone=Asia/Kolkata"
+    ports:
+      - "8520:8520"
+    env_file:
+      - ./top-5g-pm-file-sync.env
+    volumes:
+      - ${HOME}/logs/top-5g-pm-file-sync:/app/logs
+    networks:
+      - top
+
+networks:
+  top:
+    name: top
+    external: true 
