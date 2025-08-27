@@ -1,0 +1,70 @@
+topics:
+  - name: "top.5g.pm.files.test1"
+    broker: "localhost:9092"
+    partitions: 4
+    consumer:
+      group-id: "top-5g-pm-file-sync-test1"
+      threads: 4
+      auto-offset-reset: "latest"
+    description: "Test PM files from EMS System 1"
+
+  - name: "top.5g.pm.files.test2"
+    broker: "localhost:9092"
+    partitions: 4
+    consumer:
+      group-id: "top-5g-pm-file-sync-test2"
+      threads: 4
+      auto-offset-reset: "latest"
+    description: "Test PM files from EMS System 2"
+
+global-consumer:
+  key-deserializer: "org.apache.kafka.common.serialization.StringDeserializer"
+  value-deserializer: "org.apache.kafka.common.serialization.StringDeserializer"
+  enable-auto-commit: true
+  auto-commit-interval-ms: 5000
+  session-timeout-ms: 30000
+  max-poll-records: 500
+
+global-producer:
+  key-serializer: "org.apache.kafka.common.serialization.StringSerializer"
+  value-serializer: "org.apache.kafka.common.serialization.StringSerializer"
+  acks: "all"
+  retries: 3
+  batch-size: 16384
+  linger-ms: 5
+  buffer-memory: 33554432
+
+security:
+  protocol: "PLAINTEXT"
+  sasl:
+    mechanism: "PLAIN"
+    jaas-config: ""
+
+topic-management:
+  auto-create-topics: true
+  auto-delete-topics: false
+  topic-creation-timeout: 30000
+  topic-deletion-timeout: 30000
+
+error-handling:
+  retry:
+    max-attempts: 3
+    backoff-delay: 1000
+    backoff-multiplier: 2.0
+  dead-letter-topic:
+    enabled: true
+    suffix: ".dlq"
+  circuit-breaker:
+    enabled: true
+    failure-threshold: 5
+    timeout: 30000
+
+monitoring:
+  health-check:
+    enabled: true
+    interval: 30000
+    timeout: 5000
+  metrics:
+    enabled: true
+    jmx-enabled: true
+    jmx-port: 9999
