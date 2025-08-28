@@ -29,7 +29,9 @@ public class FileIngestionService {
     private final CuPmFileSyncRepository cuRepository;
     private final SftpService sftpService;
 
-    private static final Pattern TIME_PATTERN = Pattern.compile("A(\\d{8})\\.(\\d{4})");
+    private static final Pattern PM_FILE_PATTERN = Pattern.compile(
+        "A(\\d{8})\\.(\\d{4})([+-]\\d{4})-(\\d{4})([+-]\\d{4})_(\\d{3}-\\d{2}-\\d{5})_.*\\.xml"
+    );
     
     @Transactional
     public void processVesEvent(String location, String sourceName, UUID rsyncId) {
@@ -52,15 +54,15 @@ public class FileIngestionService {
                 return;
             }
             
-            String serialNumber = extractSerialNumber(sourceName);
+            // Serial number will be extracted from individual XML filenames
             
             for (String xmlFile : xmlFiles) {
-                OffsetDateTime time = extractTimeFromFileName(xmlFile);
+                FileMetadata metadata = extractFileMetadata(xmlFile);
                 
                 if (isDu) {
-                    saveDuRecord(rsyncId, time, serialNumber, xmlFile);
+                    saveDuRecord(rsyncId, metadata.time, metadata.serialNumber, xmlFile);
                 } else {
-                    saveCuRecord(rsyncId, time, serialNumber, xmlFile);
+                    saveCuRecord(rsyncId, metadata.time, metadata.serialNumber, xmlFile);
                 }
             }
             
@@ -96,36 +98,45 @@ public class FileIngestionService {
         log.debug("Saved CU record: {}", record.getId());
     }
     
-    private String extractSerialNumber(String sourceName) {
-        if (sourceName == null || sourceName.isEmpty()) {
-            return "UNKNOWN";
-        }
-        
-        String[] parts = sourceName.split("-");
-        if (parts.length >= 3) {
-            return parts[parts.length - 1];
-        }
-        
-        return sourceName.length() > 15 ? sourceName.substring(0, 15) : sourceName;
-    }
-    
-    private OffsetDateTime extractTimeFromFileName(String fileName) {
-        Matcher matcher = TIME_PATTERN.matcher(fileName);
+    private FileMetadata extractFileMetadata(String fileName) {
+        Matcher matcher = PM_FILE_PATTERN.matcher(fileName);
         if (matcher.find()) {
-            String dateStr = matcher.group(1);
-            String timeStr = matcher.group(2);
+            String dateStr = matcher.group(1);        // 20250813
+            String startTime = matcher.group(2);     // 2215
+            String timezone = matcher.group(3);      // +0530
+            String serialNumber = matcher.group(6);  // 001-01-64160
             
             try {
-                String dateTimeStr = dateStr + timeStr;
+                // Parse date and time
+                String dateTimeStr = dateStr + startTime;
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
                 LocalDateTime localDateTime = LocalDateTime.parse(dateTimeStr, formatter);
-                return localDateTime.atOffset(ZoneOffset.of("+05:30"));
+                
+                // Create ZoneOffset from timezone string (+0530 -> +05:30)
+                ZoneOffset zoneOffset = ZoneOffset.of(
+                    timezone.substring(0, 3) + ":" + timezone.substring(3)
+                );
+                OffsetDateTime time = localDateTime.atOffset(zoneOffset);
+                
+                return new FileMetadata(time, serialNumber);
             } catch (Exception e) {
-                log.warn("Failed to parse time from filename: {}, using current time", fileName);
+                log.warn("Failed to parse metadata from filename: {}, error: {}", fileName, e.getMessage());
+                throw new IllegalArgumentException("Invalid PM file format: " + fileName, e);
             }
         }
         
-        return OffsetDateTime.now(ZoneId.of("Asia/Kolkata"));
+        throw new IllegalArgumentException("Filename does not match PM file pattern: " + fileName);
+    }
+    
+    // Helper class to hold extracted file metadata
+    private static class FileMetadata {
+        final OffsetDateTime time;
+        final String serialNumber;
+        
+        FileMetadata(OffsetDateTime time, String serialNumber) {
+            this.time = time;
+            this.serialNumber = serialNumber;
+        }
     }
     
     /**
