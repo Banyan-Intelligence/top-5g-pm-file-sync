@@ -75,27 +75,79 @@ public class FileIngestionService {
     }
     
     private void saveDuRecord(UUID rsyncId, OffsetDateTime time, String serialNumber, String filePath) {
-        DuPmFileSync record = new DuPmFileSync();
-        record.setRsyncId(rsyncId);
-        record.setTime(time);
-        record.setSerialNumber(serialNumber);
-        record.setFilePath(filePath);
-        record.setStatus(DuPmFileSync.Status.CREATED.getValue());
-        
-        duRepository.save(record);
-        log.debug("Saved DU record: {}", record.getId());
+        // Upsert by unique file_path: if exists -> update timestamps, else insert
+        duRepository.findByFilePath(filePath).ifPresentOrElse(existing -> {
+            existing.setRsyncId(rsyncId);
+            existing.setTime(time);
+            existing.setSerialNumber(serialNumber);
+            existing.setStatus(DuPmFileSync.Status.CREATED.getValue());
+            // Per requirement: update created_at and updated_at on re-ingest
+            existing.setCreatedAt(OffsetDateTime.now());
+            existing.setUpdatedAt(OffsetDateTime.now());
+            duRepository.save(existing);
+            log.debug("Updated existing DU record for path: {}", filePath);
+        }, () -> {
+            DuPmFileSync record = new DuPmFileSync();
+            record.setRsyncId(rsyncId);
+            record.setTime(time);
+            record.setSerialNumber(serialNumber);
+            record.setFilePath(filePath);
+            record.setStatus(DuPmFileSync.Status.CREATED.getValue());
+            try {
+                duRepository.save(record);
+                log.debug("Saved new DU record for path: {}", filePath);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                // Handle rare race: another thread inserted concurrently
+                duRepository.findByFilePath(filePath).ifPresent(existing -> {
+                    existing.setRsyncId(rsyncId);
+                    existing.setTime(time);
+                    existing.setSerialNumber(serialNumber);
+                    existing.setStatus(DuPmFileSync.Status.CREATED.getValue());
+                    existing.setCreatedAt(OffsetDateTime.now());
+                    existing.setUpdatedAt(OffsetDateTime.now());
+                    duRepository.save(existing);
+                    log.debug("Resolved race and updated existing DU record for path: {}", filePath);
+                });
+            }
+        });
     }
     
     private void saveCuRecord(UUID rsyncId, OffsetDateTime time, String serialNumber, String filePath) {
-        CuPmFileSync record = new CuPmFileSync();
-        record.setRsyncId(rsyncId);
-        record.setTime(time);
-        record.setSerialNumber(serialNumber);
-        record.setFilePath(filePath);
-        record.setStatus(CuPmFileSync.Status.CREATED.getValue());
-        
-        cuRepository.save(record);
-        log.debug("Saved CU record: {}", record.getId());
+        // Upsert by unique file_path: if exists -> update timestamps, else insert
+        cuRepository.findByFilePath(filePath).ifPresentOrElse(existing -> {
+            existing.setRsyncId(rsyncId);
+            existing.setTime(time);
+            existing.setSerialNumber(serialNumber);
+            existing.setStatus(CuPmFileSync.Status.CREATED.getValue());
+            // Per requirement: update created_at and updated_at on re-ingest
+            existing.setCreatedAt(OffsetDateTime.now());
+            existing.setUpdatedAt(OffsetDateTime.now());
+            cuRepository.save(existing);
+            log.debug("Updated existing CU record for path: {}", filePath);
+        }, () -> {
+            CuPmFileSync record = new CuPmFileSync();
+            record.setRsyncId(rsyncId);
+            record.setTime(time);
+            record.setSerialNumber(serialNumber);
+            record.setFilePath(filePath);
+            record.setStatus(CuPmFileSync.Status.CREATED.getValue());
+            try {
+                cuRepository.save(record);
+                log.debug("Saved new CU record for path: {}", filePath);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                // Handle rare race: another thread inserted concurrently
+                cuRepository.findByFilePath(filePath).ifPresent(existing -> {
+                    existing.setRsyncId(rsyncId);
+                    existing.setTime(time);
+                    existing.setSerialNumber(serialNumber);
+                    existing.setStatus(CuPmFileSync.Status.CREATED.getValue());
+                    existing.setCreatedAt(OffsetDateTime.now());
+                    existing.setUpdatedAt(OffsetDateTime.now());
+                    cuRepository.save(existing);
+                    log.debug("Resolved race and updated existing CU record for path: {}", filePath);
+                });
+            }
+        });
     }
     
     private FileMetadata extractFileMetadata(String fileName) {

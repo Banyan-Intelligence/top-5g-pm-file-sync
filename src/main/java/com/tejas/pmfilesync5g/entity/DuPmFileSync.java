@@ -26,7 +26,7 @@ public class DuPmFileSync {
     @Column(name = "serial_number", nullable = false, length = 15)
     private String serialNumber;
 
-    @Column(name = "file_path", nullable = false)
+    @Column(name = "file_path", nullable = false, unique = true)
     private String filePath;
 
     @Column(name = "status")

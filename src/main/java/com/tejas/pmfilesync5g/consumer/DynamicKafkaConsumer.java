@@ -9,8 +9,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
-import org.springframework.kafka.listener.MessageListener;
+import org.springframework.kafka.listener.AcknowledgingMessageListener;
 import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
@@ -60,16 +61,17 @@ public class DynamicKafkaConsumer {
             ContainerProperties containerProps = new ContainerProperties(topic.getName());
             containerProps.setGroupId(topic.getConsumer().getGroupId());
             containerProps.setClientId(topic.getName() + "-consumer");
+            containerProps.setAckMode(ContainerProperties.AckMode.MANUAL);
             
             ConcurrentMessageListenerContainer<String, String> container = 
                 new ConcurrentMessageListenerContainer<>(consumerFactory, containerProps);
             
             container.setConcurrency(topic.getConsumer().getThreads());
             
-            container.setupMessageListener(new MessageListener<String, String>() {
+            container.setupMessageListener(new AcknowledgingMessageListener<String, String>() {
                 @Override
-                public void onMessage(ConsumerRecord<String, String> record) {
-                    processMessage(record.value(), record.topic());
+                public void onMessage(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
+                    processMessage(record.value(), record.topic(), acknowledgment);
                 }
             });
             
@@ -83,17 +85,23 @@ public class DynamicKafkaConsumer {
         }
     }
     
-    private void processMessage(String message, String topicName) {
+    private void processMessage(String message, String topicName, Acknowledgment acknowledgment) {
         if (message == null || message.isEmpty()) {
             log.warn("Received empty message from topic: {}, skipping", topicName);
+            // Acknowledge empty messages to avoid reprocessing
+            if (acknowledgment != null) acknowledgment.acknowledge();
             return;
         }
         
         try {
             log.debug("Processing message from topic: {}", topicName);
             messageProcessorService.processMessage(message, topicName);
+            // Only acknowledge after successful processing
+            if (acknowledgment != null) acknowledgment.acknowledge();
+            log.debug("Successfully processed and acknowledged message from topic: {}", topicName);
         } catch (Exception ex) {
-            log.error("Error processing message from topic: {}", topicName, ex);
+            // Do not acknowledge - message will be redelivered; rely on Retryable in service
+            log.error("Error processing message from topic: {}, message will be retried", topicName, ex);
         }
     }
     
