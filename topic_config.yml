@@ -1,6 +1,6 @@
 topics:
   - name: "top.5g.pm.files.test1"
-    broker: "localhost:9092"
+    broker: "kafka:29092"
     partitions: 4
     consumer:
       group-id: "top-5g-pm-file-sync-test1"
@@ -9,7 +9,7 @@ topics:
     description: "Test PM files from EMS System 1"
 
   - name: "top.5g.pm.files.test2"
-    broker: "localhost:9092"
+    broker: "kafka:29092"
     partitions: 4
     consumer:
       group-id: "top-5g-pm-file-sync-test2"
